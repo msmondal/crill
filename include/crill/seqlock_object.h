@@ -12,13 +12,20 @@
 
 namespace crill {
 
-// A portable C++ implementation of a seqlock inspired by Hans Boehm's paper
+// A portable C++ implementation of a seqlock wrapping a single value of trivially
+// copyable type, as proposed in P3825.
+// This implementation is inspired by Hans Boehm's paper
 // "Can Seqlocks Get Along With Programming Language Memory Models?"
 // and the C implementation in jemalloc.
 //
 // This version allows only a single writer. Writes are guaranteed wait-free.
 // It also allows multiple concurrent readers, which are wait-free against
 // each other, but can block if there is a concurrent write.
+//
+// On platforms that provide std::atomic_ref or an equivalent compiler intrinsic,
+// this implementation internally uses crill::atomic_load_per_byte_memcpy and
+// crill::atomic_store_per_byte_memcpy. Otherwise, it falls back to performing
+// per-byte atomic loads and stores.
 template <typename T>
 class seqlock_object
 {
@@ -58,8 +65,7 @@ public:
         if (seq1 % 2 != 0)
             return false;
 
-        crill::atomic_load_per_byte_memcpy(&t, &data, sizeof(data), std::memory_order_acquire);
-
+        atomic_storage.memcpy_out(t);
         std::size_t seq2 = seq.load(std::memory_order_relaxed);
         return seq1 == seq2;
     }
@@ -68,19 +74,54 @@ public:
     // Non-blocking guarantees: wait-free.
     void store(T t) noexcept
     {
-        // Note: load + store usually has better performance characteristics than fetch_add(1)
         std::size_t old_seq = seq.load(std::memory_order_relaxed);
         seq.store(old_seq + 1, std::memory_order_relaxed);
+        // Note: seq.load + store usually has better performance characteristics than seq.fetch_add(1)
 
-        crill::atomic_store_per_byte_memcpy(&data, &t, sizeof(data), std::memory_order_release);
-
+        atomic_storage.memcpy_in(t);
         seq.store(old_seq + 2, std::memory_order_release);
     }
 
 private:
-    char data[sizeof(T)];
     std::atomic<std::size_t> seq = 0;
     static_assert(decltype(seq)::is_always_lock_free);
+
+    struct atomic_storage_t {
+        T memcpy_out(T& value_out) const {
+          #if CRILL_BYTEWISE_ATOMIC_MEMCPY_AVAILABLE
+            crill::atomic_load_per_byte_memcpy(&value_out, &data, sizeof(data), std::memory_order_acquire);
+          #else
+            char* bytes_out = reinterpret_cast<char*>(&value_out);
+
+            for (std::size_t i = 0; i < sizeof(T); ++i)
+                bytes_out[i] = data[i].load(std::memory_order_relaxed);
+
+            std::atomic_thread_fence(std::memory_order_acquire);
+          #endif
+        }
+
+        void memcpy_in(T& value_in) {
+          #if CRILL_BYTEWISE_ATOMIC_MEMCPY_AVAILABLE
+            crill::atomic_store_per_byte_memcpy(&data, &value_in, sizeof(data), std::memory_order_release);
+          #else
+            const char* bytes_in_ptr = reinterpret_cast<const char*>(&value_in);
+
+            std::atomic_thread_fence(std::memory_order_release);
+
+            for (std::size_t i = 0; i < sizeof(T); ++i)
+                data[i].store(bytes_in_ptr[i], std::memory_order_relaxed);
+          #endif
+        }
+
+    private:
+      #if CRILL_BYTEWISE_ATOMIC_MEMCPY_AVAILABLE
+        char data[sizeof(T)];
+      #else
+        alignas(T) std::atomic<uint8_t> data[sizeof(T)];
+      #endif
+    };
+
+    atomic_storage_t atomic_storage;
 };
 
 } // namespace crill
