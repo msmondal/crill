@@ -87,7 +87,7 @@ private:
     static_assert(decltype(seq)::is_always_lock_free);
 
     struct atomic_storage_t {
-        T memcpy_out(T& value_out) const {
+        void memcpy_out(T& value_out) const {
           #if CRILL_BYTEWISE_ATOMIC_MEMCPY_AVAILABLE
             crill::atomic_load_per_byte_memcpy(&value_out, &data, sizeof(data), std::memory_order_acquire);
           #else
