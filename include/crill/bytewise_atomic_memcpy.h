@@ -6,6 +6,7 @@
 #ifndef CRILL_BYTEWISE_ATOMIC_MEMCPY_H
 #define CRILL_BYTEWISE_ATOMIC_MEMCPY_H
 
+#include <cstddef>
 #include <atomic>
 #include <crill/contracts.h>
 #include <crill/platform.h>
@@ -34,7 +35,7 @@ namespace crill {
     //   byte is atomic with memory order order. These individual loads are
     //   unsequenced with respect to each other.
     inline void* atomic_load_per_byte_memcpy
-    (void* dest, const void* source, size_t count, std::memory_order order)
+    (void* dest, const void* source, std::size_t count, std::memory_order order)
     {
         CRILL_PRE(order == std::memory_order_acquire || order == std::memory_order_relaxed);
 
@@ -67,7 +68,7 @@ namespace crill {
     //   destination byte is atomic with memory order order. These individual
     //   stores are unsequenced with respect to each other.
     inline void* atomic_store_per_byte_memcpy
-    (void* dest, const void* source, size_t count, std::memory_order order)
+    (void* dest, const void* source, std::size_t count, std::memory_order order)
     {
         CRILL_PRE(order == std::memory_order_release || order == std::memory_order_relaxed);
 
