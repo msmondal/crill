@@ -6,6 +6,8 @@
 #include <crill/bytewise_atomic_memcpy.h>
 #include <doctest/doctest.h>
 
+#if CRILL_BYTEWISE_ATOMIC_MEMCPY_AVAILABLE
+
 TEST_CASE("atomic_load_per_byte_memcpy with nullptrs")
 {
     REQUIRE(crill::atomic_load_per_byte_memcpy(nullptr, nullptr, 0, std::memory_order_relaxed) == nullptr);
@@ -40,3 +42,5 @@ TEST_CASE("atomic_store_per_byte_memcpy with struct")
 }
 
 // TODO: More thorough tests
+
+#endif // CRILL_BYTEWISE_ATOMIC_MEMCPY_AVAILABLE
