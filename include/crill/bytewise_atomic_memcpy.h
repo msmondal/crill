@@ -11,15 +11,32 @@
 #include <crill/contracts.h>
 #include <crill/platform.h>
 
+#if __cpp_lib_atomic_ref || CRILL_CLANG || CRILL_GCC
+  #define CRILL_BYTEWISE_ATOMIC_MEMCPY_AVAILABLE 1
+#else
+  #define CRILL_BYTEWISE_ATOMIC_MEMCPY_AVAILABLE 0
+#endif
+
+// Note: the facilities defined in this header require std::atomic_ref
+// or an equivalent compiler intrinsic. If this is not available,
+// including this header will do nothing except defining
+// CRILL_BYTEWISE_ATOMIC_MEMCPY_AVAILABLE to false (which the user
+// can use to conditionally enable their own workaround implementation
+// for such platforms).
+#if CRILL_BYTEWISE_ATOMIC_MEMCPY_AVAILABLE
+
 namespace crill {
     // These are implementations of the corresponding functions
     // atomic_load_per_byte_memcpy and atomic_store_per_byte_memcpy
     // from the Concurrency TS 2.
     // They behave as if the source and dest bytes respectively
     // were individual atomic objects.
-    // The implementations provided below is portable, but slow.
-    // PRs with platform-optimised versions are welcome :)
-    // The implementations provided below are also *technically*
+    // The implementation provided below is portable, but slow.
+    // As pointed out in P1478, efficient implementations would
+    // need knowledge about the particular memcpy implementation
+    // and would thus be platform-specific. PRs proposing such
+    // implementations are welcome :)
+    // The implementation provided below are also *technically*
     // UB because C++ does not let us loop over the bytes of
     // an object representation, but that is a known wording bug that
     // will be fixed by P1839; the technique should work on any
@@ -48,8 +65,7 @@ namespace crill {
               #elif CRILL_CLANG || CRILL_GCC
                 dest_bytes[i] = __atomic_load_n(src_bytes + i, __ATOMIC_RELAXED);
               #else
-                // No atomic_ref or equivalent functionality available on this platform!
-                #error "Platform not supported!"
+                #error "Not available on this platform!"
               #endif
         }
 
@@ -83,8 +99,7 @@ namespace crill {
           #elif CRILL_CLANG || CRILL_GCC
             __atomic_store_n(dest_bytes + i, src_bytes[i], __ATOMIC_RELAXED);
           #else
-            // No atomic_ref or equivalent functionality available on this platform!
-            #error "Platform not supported!"
+            #error "Not available on this platform!"
           #endif
         }
 
@@ -92,4 +107,5 @@ namespace crill {
     }
 }
 
+#endif //CRILL_BYTEWISE_ATOMIC_MEMCPY_AVAILABLE
 #endif //CRILL_BYTEWISE_ATOMIC_MEMCPY_H
